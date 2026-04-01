@@ -382,9 +382,9 @@ async function fetchDeps(arret) {
     const call = mvj?.MonitoredCall ?? {};
 
     // Numéro de ligneligne
-    const line = mvj?.PublishedLineName?.[0]?.value
-      ?? mvj?.LineRef?.value?.match(/::([^:]+):/)?.[1]
-      ?? '?';
+    const line = mvj?.PublishedLineName?.[0]?.value // Nom public (ex: 21)
+  ?? mvj?.LineRef?.value?.split(':').pop()      // Repli si le premier échoue
+  ?? '?';
 
     // Destination
     const dest = mvj?.DestinationName?.[0]?.value ?? '—';
