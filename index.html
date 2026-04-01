@@ -382,8 +382,9 @@ async function fetchDeps(arret) {
     const call = mvj?.MonitoredCall ?? {};
 
     // Numéro de ligneligne
-    const line = mvj?.PublishedLineName?.[0]?.value // Nom public (ex: 21)
-  ?? mvj?.LineRef?.value?.split(':').pop()      // Repli si le premier échoue
+const line = mvj?.PublishedLineName?.[0]?.value              // 1. Nom publié
+  ?? call?.RouteShortName                                    // 2. Nom court dans l'arrêt (très fiable)
+  ?? mvj?.LineRef?.value?.split(':').slice(-2, -1)[0]        // 3. Extraction de l'ID technique (ex: C01073)
   ?? '?';
 
     // Destination
