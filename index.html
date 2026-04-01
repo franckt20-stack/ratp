@@ -382,7 +382,7 @@ async function fetchDeps(arret) {
     const call = mvj?.MonitoredCall ?? {};
 
     // Numéro de ligne
-    const line = mvj?.PublishedLineName?.[1]?.value
+    const line = mvj?.PublishedLineName?.[0]?.value
       ?? mvj?.LineRef?.value?.match(/::([^:]+):/)?.[1]
       ?? '?';
 
