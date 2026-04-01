@@ -271,7 +271,7 @@
 </div>
 
 <div class="content-area" id="app">
-  <div class="no-data" style="padding:40px 14px;">Appuyez sur Actualiser</div>
+  <div class="no-data" style="padding:40px 14px">Chargement…</div>
 </div>
 
 <div class="refresh-bar" style="flex-direction:column;gap:6px;padding:10px 16px">
@@ -282,157 +282,196 @@
 </div>
 
 <script>
-// ── Configuration ──────────────────────────────────────────────────
-// Token démo public Navitia — aucune inscription requise
-const TOKEN = 'd5d1060f-e77e-402a-b8f3-c7a4b5fa94de';
-const NAVITIA = 'https://api.navitia.io/v1/coverage/fr-idf';
-const AUTH    = { 'Authorization': 'Basic ' + btoa(TOKEN + ':') };
+// ══════════════════════════════════════════════════════
+//  CONFIGURATION — modifiez uniquement cette section
+// ══════════════════════════════════════════════════════
+
+// Votre token PRIM IDFM
+const PRIM_TOKEN = 'LR93KggTkThxa7Mmw0xbUytukiGqP9WG';
+
+// Intervalle de rafraîchissement (secondes)
 const REFRESH_SEC = 30;
 
-// BUG CORRIGÉ #2 : IDs numériques uniquement — le préfixe "stop_point:IDFM:" est ajouté automatiquement
+// Vos arrêts — id = numéro STIF (visible sur le référentiel IDFM)
+// lignes : null = toutes les lignes / ['38', '62'] = filtrer par numéro de ligne
 const ARRETS = [
-  { id: '30029', nom: 'Stade Charlety' },
-  { id: '28007', nom: 'Stade Charlety' },
-  { id: '30094', nom: 'Daviel' },
-  { id: '28847', nom: 'Stade Charlety' },
-  { id: '24112', nom: 'Stade Charlety' }
+  { id: '30029', nom: 'Stade Charlety',  sens: null, lignes: null },
+  { id: '28007', nom: 'Stade Charlety',  sens: null, lignes: null },
+  { id: '30094', nom: 'Daviel',          sens: null, lignes: null },
+  { id: '28847', nom: 'Stade Charlety',  sens: null, lignes: null },
+  { id: '24112', nom: 'Stade Charlety',  sens: null, lignes: null }
 ];
 
-// ── BUG CORRIGÉ #3 : Parser de date Navitia ("20260401T143000") ────
-function parseNavDate(str) {
-  if (!str) return null;
-  return new Date(
-    +str.slice(0, 4), +str.slice(4, 6) - 1, +str.slice(6, 8),
-    +str.slice(9, 11), +str.slice(11, 13), +str.slice(13, 15)
-  );
+// ══════════════════════════════════════════════════════
+//  NE PAS MODIFIER EN DESSOUS
+// ══════════════════════════════════════════════════════
+
+const PRIM_URL = 'https://prim.iledefrance-mobilites.fr/marketplace/stop-monitoring';
+
+// Couleurs officielles IDFM/RATP par numéro de ligne
+const LINE_COLORS = {
+  '20':'#C95F2A','21':'#C9910D','22':'#8D5E26','24':'#7B7B00','26':'#8D5E26',
+  '27':'#8D5E26','28':'#6A378E','29':'#1C4E9F','31':'#1C4E9F','38':'#6E5B9C',
+  '39':'#CD2027','42':'#0079C2','43':'#CD2027','47':'#0055A4','54':'#1C4E9F',
+  '57':'#7BBF4E','60':'#7BBF4E','62':'#C9910D','63':'#C9910D','64':'#8D5E26',
+  '67':'#7BBF4E','68':'#8D5E26','69':'#C9910D','72':'#C9910D','76':'#C95F2A',
+  '83':'#7BBF4E','84':'#7BBF4E','88':'#7BBF4E','91':'#C9910D','92':'#0055A4',
+  '185':'#0055A4','216':'#7BBF4E','289':'#1C4E9F','N':'#1a2040',
+};
+
+function lineColor(code) {
+  return LINE_COLORS[code] || '#6c5ce7';
 }
 
-function minsUntil(dateObj) {
-  if (!dateObj) return 999;
-  return Math.max(0, Math.round((dateObj - Date.now()) / 60000));
+// ── Temps ────────────────────────────────────────────
+function minsUntil(d) {
+  // d est un objet Date (PRIM renvoie ISO 8601 avec timezone)
+  if (!d || isNaN(d)) return 999;
+  return Math.max(0, Math.round((d - Date.now()) / 60000));
 }
 
-function formatTime(mins) {
-  if (mins === 0) return "À l'approche";
-  if (mins === 1) return '1 min';
-  return mins + ' min';
+function formatTime(m) {
+  if (m === 0) return "À l'approche";
+  if (m === 1) return '1 min';
+  return m + ' min';
 }
 
-function timeClass(mins) {
-  if (mins <= 1) return 'imminent';
-  if (mins <= 3) return 'approaching';
+function timeClass(m) {
+  if (m <= 1) return 'imminent';
+  if (m <= 3) return 'approaching';
   return '';
 }
 
-// ── BUG CORRIGÉ #4 : Normalisation du format Navitia ──────────────
-function groupDepartures(departures) {
-  const groups = {};
-  for (const d of departures) {
-    const key = d.line + '|' + d.destination;
-    if (!groups[key]) {
-      groups[key] = {
-        line: d.line,
-        lineColor: d.lineColor,
-        lineTextColor: d.lineTextColor,
-        direction: d.destination,
-        times: []
-      };
+// ── Appel API PRIM ───────────────────────────────────
+async function fetchDeps(arret) {
+  const monRef = `STIF:StopPoint:Q:${arret.id}:`;
+  const url = `${PRIM_URL}?MonitoringRef=${encodeURIComponent(monRef)}`;
+
+  let r;
+  try {
+    r = await fetch(url, {
+      headers: { 'apikey': PRIM_TOKEN, 'Accept': 'application/json' }
+    });
+  } catch (netErr) {
+    // TypeError = réseau / CORS
+    const msg = netErr.message || String(netErr);
+    if (msg.includes('fetch') || netErr.name === 'TypeError') {
+      throw new Error(
+        'Erreur réseau (CORS ?). ' +
+        'Vérifiez que le fichier est servi en HTTPS et que votre token est actif. ' +
+        'Détail : ' + msg
+      );
     }
-    if (groups[key].times.length < 2 && d.expectedDeparture) {
-      groups[key].times.push(minsUntil(d.expectedDeparture));
-    }
+    throw netErr;
   }
-  return Object.values(groups).sort((a, b) => {
-    const ma = a.times.length ? Math.min(...a.times) : 999;
-    const mb = b.times.length ? Math.min(...b.times) : 999;
-    return ma - mb;
-  });
+
+  if (!r.ok) {
+    const txt = await r.text().catch(() => '');
+    throw new Error(`HTTP ${r.status} — ${txt.slice(0, 120)}`);
+  }
+
+  const json = await r.json();
+
+  // Chemin SIRI Lite : Siri.ServiceDelivery.StopMonitoringDelivery[0].MonitoredStopVisit
+  const visits =
+    json?.Siri?.ServiceDelivery?.StopMonitoringDelivery?.[0]
+        ?.MonitoredStopVisit ?? [];
+
+  let departures = visits.map(v => {
+    const mvj  = v?.MonitoredVehicleJourney ?? {};
+    const call = mvj?.MonitoredCall ?? {};
+
+    // Numéro de ligne
+    const line = mvj?.PublishedLineName?.[0]?.value
+      ?? mvj?.LineRef?.value?.match(/::([^:]+):/)?.[1]
+      ?? '?';
+
+    // Destination
+    const dest = mvj?.DestinationName?.[0]?.value ?? '—';
+
+    // Heure : heure estimée, sinon heure théorique
+    const rawTime = call?.ExpectedDepartureTime ?? call?.AimedDepartureTime;
+    const dep = rawTime ? new Date(rawTime) : null;
+
+    // Bus déjà à l'arrêt ?
+    const atStop = call?.VehicleAtStop === true || call?.VehicleAtStop === 'true';
+
+    // Course annulée ?
+    const cancelled = mvj?.Monitored === false || mvj?.Monitored === 'false';
+
+    return { line, dest, dep, atStop, cancelled };
+  }).filter(d => !d.cancelled && d.dep !== null);
+
+  // Filtre par ligne si demandé
+  if (arret.lignes?.length) {
+    departures = departures.filter(d => arret.lignes.includes(d.line));
+  }
+
+  return departures;
 }
 
-function renderStop(arret, data, err) {
+// ── Groupement ligne + destination ──────────────────
+function groupDepartures(deps) {
+  const groups = {};
+  for (const d of deps) {
+    const key = d.line + '|' + d.dest;
+    if (!groups[key]) {
+      groups[key] = { line: d.line, dest: d.dest, times: [] };
+    }
+    if (groups[key].times.length < 2) {
+      groups[key].times.push(d.atStop ? 0 : minsUntil(d.dep));
+    }
+  }
+  return Object.values(groups).sort((a, b) =>
+    (a.times[0] ?? 999) - (b.times[0] ?? 999)
+  );
+}
+
+// ── Rendu d'un arrêt ────────────────────────────────
+function renderStop(arret, deps, err) {
+  const stopId = arret.id;
+  const stopHead = `
+    <div class="stop-header">
+      <div class="stop-icon">B</div>
+      <div>
+        <span class="stop-name">${arret.nom}</span>
+        ${arret.sens ? `<div style="font-size:11px;color:#8db4cc;margin-top:2px">${arret.sens}</div>` : ''}
+        <div style="font-size:10px;color:#3a5a7a;margin-top:1px">ID ${stopId}</div>
+      </div>
+    </div>`;
+
   if (err) {
-    const isCors = err.message && (err.message.includes('fetch') || err.message.includes('network') || err.message.toLowerCase().includes('failed'));
-    const errType = isCors
-      ? 'Réseau inaccessible (CORS ou sandbox)'
-      : ('HTTP ' + (err.status || err.message || 'inconnu'));
     return `
       <div class="stop-section">
-        <div class="stop-header">
-          <div class="stop-icon">B</div>
-          <span class="stop-name">${arret.nom}</span>
-        </div>
+        ${stopHead}
         <div class="error-msg">
-          <span class="err-code">${errType}</span><br>
-          ${isCors
-            ? '⚠️ Ce fichier doit être ouvert dans un vrai navigateur (Chrome, Safari…), pas dans un aperçu en ligne.'
-            : `Vérifiez l'ID d'arrêt : <code>stop_point:IDFM:${arret.id}</code>`}
+          <span class="err-code">ERREUR</span> ${err.message}
         </div>
       </div>`;
   }
 
-  const deps = data.departures || [];
   if (!deps.length) {
     return `
       <div class="stop-section">
-        <div class="stop-header">
-          <div class="stop-icon">B</div>
-          <span class="stop-name">${arret.nom}</span>
-        </div>
-        <div class="no-data">Aucun passage prévu</div>
+        ${stopHead}
+        <div class="no-data">Aucun passage prévu dans l'heure</div>
       </div>`;
   }
 
   const groups = groupDepartures(deps);
-  let rows = '';
-  for (const g of groups) {
-    const bgColor  = g.lineColor    ? '#' + g.lineColor    : '#6c5ce7';
-    const txtColor = g.lineTextColor ? '#' + g.lineTextColor : '#fff';
-    for (const mins of g.times) {
-      const cls = timeClass(mins);
-      rows += `
-        <div class="departure-row">
-          <div class="line-badge" style="background:${bgColor};color:${txtColor}">${g.line}</div>
-          <div class="direction-text">${g.direction}</div>
-          <div class="time-display ${cls}">${formatTime(mins)}</div>
-        </div>`;
-    }
-  }
+  const rows = groups.map(g =>
+    g.times.map(m => `
+      <div class="departure-row">
+        <div class="line-badge" style="background:${lineColor(g.line)};color:#fff">${g.line}</div>
+        <div class="direction-text">${g.dest}</div>
+        <div class="time-display ${timeClass(m)}">${formatTime(m)}</div>
+      </div>`).join('')
+  ).join('');
 
-  return `
-    <div class="stop-section">
-      <div class="stop-header">
-        <div class="stop-icon">B</div>
-        <span class="stop-name">${arret.nom}</span>
-      </div>
-      ${rows}
-    </div>`;
+  return `<div class="stop-section">${stopHead}${rows}</div>`;
 }
 
-// ── BUG CORRIGÉ #1 : Appel direct Navitia (plus de /api/departures) ─
-async function fetchDeps(stopId) {
-  const fullId = 'stop_point:IDFM:' + stopId;
-  const url = `${NAVITIA}/stop_points/${encodeURIComponent(fullId)}/departures?count=6&duration=3600`;
-  const res = await fetch(url, { headers: AUTH });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const json = await res.json();
-
-  // Normaliser la réponse Navitia vers le format interne attendu
-  const departures = (json.departures || []).map(d => {
-    const di = d.display_informations || {};
-    const dt = d.stop_date_time      || {};
-    return {
-      line:             di.label      || '?',
-      lineColor:        di.color      || null,
-      lineTextColor:    di.text_color || null,
-      destination:      di.direction  || '—',
-      expectedDeparture: parseNavDate(dt.departure_date_time)
-    };
-  });
-
-  return { departures };
-}
-
-// ── AJOUT #5 : Auto-refresh 30 s avec décompte ────────────────────
+// ── Auto-refresh ─────────────────────────────────────
 let countdown = REFRESH_SEC;
 let autoTimer;
 
@@ -443,10 +482,7 @@ function startAutoRefresh() {
   autoTimer = setInterval(() => {
     countdown--;
     updateCountdown();
-    if (countdown <= 0) {
-      countdown = REFRESH_SEC;
-      refreshAll();
-    }
+    if (countdown <= 0) { countdown = REFRESH_SEC; refreshAll(); }
   }, 1000);
 }
 
@@ -455,36 +491,7 @@ function updateCountdown() {
   if (el) el.textContent = countdown + 's';
 }
 
-async function checkConnectivity() {
-  // Retire le banner si déjà affiché
-  const old = document.getElementById('diag-banner');
-  if (old) old.remove();
-
-  try {
-    // Requête de test légère vers Navitia
-    const r = await fetch('https://api.navitia.io/v1/', {
-      headers: AUTH,
-      signal: AbortSignal.timeout(5000)
-    });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    // OK — pas de banner
-  } catch (e) {
-    const isSandbox = e.message?.toLowerCase().includes('fetch') ||
-                      e.message?.toLowerCase().includes('failed') ||
-                      e.name === 'TypeError';
-    const banner = document.createElement('div');
-    banner.id = 'diag-banner';
-    banner.className = 'diag-banner';
-    banner.innerHTML = isSandbox
-      ? `<strong>⚠️ Aperçu non fonctionnel — comportement normal</strong>
-         Ce fichier HTML est ouvert dans un environnement sandboxé (aperçu Claude ou autre) qui bloque les appels réseau externes.<br><br>
-         ✅ <strong>Solution :</strong> téléchargez le fichier et ouvrez-le directement dans Chrome, Firefox ou Safari — il fonctionnera parfaitement.`
-      : `<strong>⚠️ API Navitia inaccessible</strong>
-         Erreur : ${e.message}<br>Vérifiez votre connexion internet.`;
-    document.getElementById('app').prepend(banner);
-  }
-}
-
+// ── Refresh principal ────────────────────────────────
 async function refreshAll() {
   const btn = document.getElementById('refreshBtn');
   btn.disabled = true;
@@ -492,39 +499,32 @@ async function refreshAll() {
 
   const results = await Promise.allSettled(
     ARRETS.map(async a => {
-      try {
-        const data = await fetchDeps(a.id);
-        return { arret: a, data, err: null };
-      } catch (e) {
-        return { arret: a, data: null, err: e };
-      }
+      try   { return { arret: a, deps: await fetchDeps(a), err: null }; }
+      catch (e) { return { arret: a, deps: null,            err: e   }; }
     })
   );
 
   let html = '';
   for (const r of results) {
-    if (r.status === 'fulfilled' && r.value) {
-      html += renderStop(r.value.arret, r.value.data, r.value.err);
-    }
+    if (r.status !== 'fulfilled') continue;
+    const { arret, deps, err } = r.value;
+    html += renderStop(arret, deps ?? [], err);
   }
 
   const now = new Date();
-  const hh = String(now.getHours()).padStart(2, '0');
-  const mm = String(now.getMinutes()).padStart(2, '0');
-  const ss = String(now.getSeconds()).padStart(2, '0');
-  html += `<div class="last-update">Dernière mise à jour : ${hh}:${mm}:${ss}</div>`;
+  const ts = [now.getHours(), now.getMinutes(), now.getSeconds()]
+    .map(n => String(n).padStart(2, '0')).join(':');
+  html += `<div class="last-update">Mis à jour : ${ts} — API IDFM PRIM</div>`;
 
   document.getElementById('app').innerHTML = html;
   btn.disabled = false;
   btn.classList.remove('loading');
-
-  // Relancer le décompte après chaque refresh (manuel ou auto)
   startAutoRefresh();
 }
 
-checkConnectivity();
+// ── Init ─────────────────────────────────────────────
 refreshAll();
-
+</script>
 
 </body>
 </html>
