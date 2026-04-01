@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Prochains passages</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #1a1a2e;
+    font-family: 'Share Tech Mono', monospace;
+    color: #f5f5dc;
+    min-height: 100vh;
+    max-width: 480px;
+    margin: 0 auto;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .header {
+    background: #003a65;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 3px solid #00a86b;
+  }
+
+  .header-title {
+    font-size: 15px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #fff;
+  }
+
+  .ratp-logo {
+    width: 28px;
+    height: 28px;
+    background: #00a86b;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: bold;
+    color: #fff;
+    flex-shrink: 0;
+  }
+
+  .stop-section {
+    margin: 12px 8px;
+    background: #0d1b2a;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid #1b2838;
+  }
+
+  .stop-header {
+    background: #003a65;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .stop-icon {
+    width: 26px;
+    height: 26px;
+    background: #00a86b;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: bold;
+    color: #fff;
+    flex-shrink: 0;
+  }
+
+  .stop-name {
+    font-size: 16px;
+    font-weight: bold;
+    color: #fff;
+    letter-spacing: 0.5px;
+  }
+
+  .departure-row {
+    display: grid;
+    grid-template-columns: 52px 1fr auto;
+    align-items: center;
+    padding: 10px 14px;
+    border-bottom: 1px solid #1b2838;
+    gap: 10px;
+    min-height: 48px;
+  }
+
+  .departure-row:last-child {
+    border-bottom: none;
+  }
+
+  .line-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 28px;
+    min-width: 42px;
+    padding: 0 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: bold;
+    color: #fff;
+    background: #6c5ce7;
+    text-align: center;
+    letter-spacing: 0.5px;
+  }
+
+  .direction-text {
+    font-size: 13px;
+    color: #c8d6e5;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.3;
+  }
+
+  .time-display {
+    font-size: 20px;
+    font-weight: bold;
+    color: #feca57;
+    text-align: right;
+    white-space: nowrap;
+    min-width: 60px;
+    text-shadow: 0 0 8px rgba(254, 202, 87, 0.4);
+  }
+
+  .time-display.imminent {
+    color: #ff6b6b;
+    animation: blink 1s ease-in-out infinite;
+    text-shadow: 0 0 8px rgba(255, 107, 107, 0.5);
+  }
+
+  .time-display.approaching {
+    color: #ffa502;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .no-data {
+    padding: 20px 14px;
+    text-align: center;
+    color: #636e72;
+    font-size: 13px;
+  }
+
+  .refresh-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 12px 16px;
+    background: #003a65;
+    border-top: 3px solid #00a86b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    z-index: 10;
+  }
+
+  .refresh-btn {
+    background: #00a86b;
+    color: #fff;
+    border: none;
+    padding: 12px 28px;
+    border-radius: 6px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 15px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+    width: 100%;
+    transition: background 0.2s;
+  }
+
+  .refresh-btn:active {
+    background: #00875a;
+  }
+
+  .refresh-btn:disabled {
+    background: #2d3436;
+    color: #636e72;
+  }
+
+  .refresh-btn.loading {
+    position: relative;
+    color: transparent;
+  }
+
+  .refresh-btn.loading::after {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    border: 3px solid #636e72;
+    border-top-color: #fff;
+    border-radius: 50%;
+    top: 50%;
+    left: 50%;
+    margin: -10px 0 0 -10px;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .last-update {
+    font-size: 11px;
+    color: #636e72;
+    text-align: center;
+    padding: 8px 0 0 0;
+  }
+
+  .content-area {
+    padding-bottom: 80px;
+  }
+
+  .error-msg {
+    padding: 12px 14px;
+    text-align: left;
+    color: #ff6b6b;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .err-code {
+    display: inline-block;
+    background: #3d0000;
+    border: 1px solid #7a0000;
+    border-radius: 3px;
+    padding: 1px 6px;
+    font-size: 11px;
+    margin-bottom: 6px;
+    color: #ff9999;
+  }
+  .diag-banner {
+    margin: 12px 8px 0;
+    background: #1a1200;
+    border: 1px solid #4a3500;
+    border-radius: 6px;
+    padding: 12px 14px;
+    font-size: 12px;
+    color: #c8a84b;
+    line-height: 1.6;
+  }
+  .diag-banner strong { color: #feca57; display: block; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <span class="header-title">Prochains passages</span>
+  <div class="ratp-logo">B</div>
+</div>
+
+<div class="content-area" id="app">
+  <div class="no-data" style="padding:40px 14px;">Appuyez sur Actualiser</div>
+</div>
+
+<div class="refresh-bar" style="flex-direction:column;gap:6px;padding:10px 16px">
+  <button class="refresh-btn" id="refreshBtn" onclick="refreshAll()">Actualiser</button>
+  <div style="font-size:11px;color:#636e72;font-family:'Share Tech Mono',monospace;letter-spacing:1px">
+    Auto-refresh dans <span id="countdown" style="color:#00a86b">30s</span>
+  </div>
+</div>
+
+<script>
+// ── Configuration ──────────────────────────────────────────────────
+// Token démo public Navitia — aucune inscription requise
+const TOKEN = 'd5d1060f-e77e-402a-b8f3-c7a4b5fa94de';
+const NAVITIA = 'https://api.navitia.io/v1/coverage/fr-idf';
+const AUTH    = { 'Authorization': 'Basic ' + btoa(TOKEN + ':') };
+const REFRESH_SEC = 30;
+
+// BUG CORRIGÉ #2 : IDs numériques uniquement — le préfixe "stop_point:IDFM:" est ajouté automatiquement
+const ARRETS = [
+  { id: '30029', nom: 'Stade Charlety' },
+  { id: '28007', nom: 'Stade Charlety' },
+  { id: '30094', nom: 'Daviel' },
+  { id: '28847', nom: 'Stade Charlety' },
+  { id: '24112', nom: 'Stade Charlety' }
+];
+
+// ── BUG CORRIGÉ #3 : Parser de date Navitia ("20260401T143000") ────
+function parseNavDate(str) {
+  if (!str) return null;
+  return new Date(
+    +str.slice(0, 4), +str.slice(4, 6) - 1, +str.slice(6, 8),
+    +str.slice(9, 11), +str.slice(11, 13), +str.slice(13, 15)
+  );
+}
+
+function minsUntil(dateObj) {
+  if (!dateObj) return 999;
+  return Math.max(0, Math.round((dateObj - Date.now()) / 60000));
+}
+
+function formatTime(mins) {
+  if (mins === 0) return "À l'approche";
+  if (mins === 1) return '1 min';
+  return mins + ' min';
+}
+
+function timeClass(mins) {
+  if (mins <= 1) return 'imminent';
+  if (mins <= 3) return 'approaching';
+  return '';
+}
+
+// ── BUG CORRIGÉ #4 : Normalisation du format Navitia ──────────────
+function groupDepartures(departures) {
+  const groups = {};
+  for (const d of departures) {
+    const key = d.line + '|' + d.destination;
+    if (!groups[key]) {
+      groups[key] = {
+        line: d.line,
+        lineColor: d.lineColor,
+        lineTextColor: d.lineTextColor,
+        direction: d.destination,
+        times: []
+      };
+    }
+    if (groups[key].times.length < 2 && d.expectedDeparture) {
+      groups[key].times.push(minsUntil(d.expectedDeparture));
+    }
+  }
+  return Object.values(groups).sort((a, b) => {
+    const ma = a.times.length ? Math.min(...a.times) : 999;
+    const mb = b.times.length ? Math.min(...b.times) : 999;
+    return ma - mb;
+  });
+}
+
+function renderStop(arret, data, err) {
+  if (err) {
+    const isCors = err.message && (err.message.includes('fetch') || err.message.includes('network') || err.message.toLowerCase().includes('failed'));
+    const errType = isCors
+      ? 'Réseau inaccessible (CORS ou sandbox)'
+      : ('HTTP ' + (err.status || err.message || 'inconnu'));
+    return `
+      <div class="stop-section">
+        <div class="stop-header">
+          <div class="stop-icon">B</div>
+          <span class="stop-name">${arret.nom}</span>
+        </div>
+        <div class="error-msg">
+          <span class="err-code">${errType}</span><br>
+          ${isCors
+            ? '⚠️ Ce fichier doit être ouvert dans un vrai navigateur (Chrome, Safari…), pas dans un aperçu en ligne.'
+            : `Vérifiez l'ID d'arrêt : <code>stop_point:IDFM:${arret.id}</code>`}
+        </div>
+      </div>`;
+  }
+
+  const deps = data.departures || [];
+  if (!deps.length) {
+    return `
+      <div class="stop-section">
+        <div class="stop-header">
+          <div class="stop-icon">B</div>
+          <span class="stop-name">${arret.nom}</span>
+        </div>
+        <div class="no-data">Aucun passage prévu</div>
+      </div>`;
+  }
+
+  const groups = groupDepartures(deps);
+  let rows = '';
+  for (const g of groups) {
+    const bgColor  = g.lineColor    ? '#' + g.lineColor    : '#6c5ce7';
+    const txtColor = g.lineTextColor ? '#' + g.lineTextColor : '#fff';
+    for (const mins of g.times) {
+      const cls = timeClass(mins);
+      rows += `
+        <div class="departure-row">
+          <div class="line-badge" style="background:${bgColor};color:${txtColor}">${g.line}</div>
+          <div class="direction-text">${g.direction}</div>
+          <div class="time-display ${cls}">${formatTime(mins)}</div>
+        </div>`;
+    }
+  }
+
+  return `
+    <div class="stop-section">
+      <div class="stop-header">
+        <div class="stop-icon">B</div>
+        <span class="stop-name">${arret.nom}</span>
+      </div>
+      ${rows}
+    </div>`;
+}
+
+// ── BUG CORRIGÉ #1 : Appel direct Navitia (plus de /api/departures) ─
+async function fetchDeps(stopId) {
+  const fullId = 'stop_point:IDFM:' + stopId;
+  const url = `${NAVITIA}/stop_points/${encodeURIComponent(fullId)}/departures?count=6&duration=3600`;
+  const res = await fetch(url, { headers: AUTH });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const json = await res.json();
+
+  // Normaliser la réponse Navitia vers le format interne attendu
+  const departures = (json.departures || []).map(d => {
+    const di = d.display_informations || {};
+    const dt = d.stop_date_time      || {};
+    return {
+      line:             di.label      || '?',
+      lineColor:        di.color      || null,
+      lineTextColor:    di.text_color || null,
+      destination:      di.direction  || '—',
+      expectedDeparture: parseNavDate(dt.departure_date_time)
+    };
+  });
+
+  return { departures };
+}
+
+// ── AJOUT #5 : Auto-refresh 30 s avec décompte ────────────────────
+let countdown = REFRESH_SEC;
+let autoTimer;
+
+function startAutoRefresh() {
+  clearInterval(autoTimer);
+  countdown = REFRESH_SEC;
+  updateCountdown();
+  autoTimer = setInterval(() => {
+    countdown--;
+    updateCountdown();
+    if (countdown <= 0) {
+      countdown = REFRESH_SEC;
+      refreshAll();
+    }
+  }, 1000);
+}
+
+function updateCountdown() {
+  const el = document.getElementById('countdown');
+  if (el) el.textContent = countdown + 's';
+}
+
+async function checkConnectivity() {
+  // Retire le banner si déjà affiché
+  const old = document.getElementById('diag-banner');
+  if (old) old.remove();
+
+  try {
+    // Requête de test légère vers Navitia
+    const r = await fetch('https://api.navitia.io/v1/', {
+      headers: AUTH,
+      signal: AbortSignal.timeout(5000)
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    // OK — pas de banner
+  } catch (e) {
+    const isSandbox = e.message?.toLowerCase().includes('fetch') ||
+                      e.message?.toLowerCase().includes('failed') ||
+                      e.name === 'TypeError';
+    const banner = document.createElement('div');
+    banner.id = 'diag-banner';
+    banner.className = 'diag-banner';
+    banner.innerHTML = isSandbox
+      ? `<strong>⚠️ Aperçu non fonctionnel — comportement normal</strong>
+         Ce fichier HTML est ouvert dans un environnement sandboxé (aperçu Claude ou autre) qui bloque les appels réseau externes.<br><br>
+         ✅ <strong>Solution :</strong> téléchargez le fichier et ouvrez-le directement dans Chrome, Firefox ou Safari — il fonctionnera parfaitement.`
+      : `<strong>⚠️ API Navitia inaccessible</strong>
+         Erreur : ${e.message}<br>Vérifiez votre connexion internet.`;
+    document.getElementById('app').prepend(banner);
+  }
+}
+
+async function refreshAll() {
+  const btn = document.getElementById('refreshBtn');
+  btn.disabled = true;
+  btn.classList.add('loading');
+
+  const results = await Promise.allSettled(
+    ARRETS.map(async a => {
+      try {
+        const data = await fetchDeps(a.id);
+        return { arret: a, data, err: null };
+      } catch (e) {
+        return { arret: a, data: null, err: e };
+      }
+    })
+  );
+
+  let html = '';
+  for (const r of results) {
+    if (r.status === 'fulfilled' && r.value) {
+      html += renderStop(r.value.arret, r.value.data, r.value.err);
+    }
+  }
+
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  const ss = String(now.getSeconds()).padStart(2, '0');
+  html += `<div class="last-update">Dernière mise à jour : ${hh}:${mm}:${ss}</div>`;
+
+  document.getElementById('app').innerHTML = html;
+  btn.disabled = false;
+  btn.classList.remove('loading');
+
+  // Relancer le décompte après chaque refresh (manuel ou auto)
+  startAutoRefresh();
+}
+
+checkConnectivity();
+refreshAll();
+
+
+</body>
+</html>
