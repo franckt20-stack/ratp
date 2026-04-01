@@ -381,7 +381,7 @@ async function fetchDeps(arret) {
     const mvj  = v?.MonitoredVehicleJourney ?? {};
     const call = mvj?.MonitoredCall ?? {};
 
-    // Numéro de ligne
+    // Numéro de ligneligne
     const line = mvj?.PublishedLineName?.[0]?.value
       ?? mvj?.LineRef?.value?.match(/::([^:]+):/)?.[1]
       ?? '?';
