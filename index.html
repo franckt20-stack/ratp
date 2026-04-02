@@ -190,14 +190,8 @@
     transition: background 0.2s;
   }
 
-  .refresh-btn:active {
-    background: #00875a;
-  }
-
-  .refresh-btn:disabled {
-    background: #2d3436;
-    color: #636e72;
-  }
+  .refresh-btn:active { background: #00875a; }
+  .refresh-btn:disabled { background: #2d3436; color: #636e72; }
 
   .refresh-btn.loading {
     position: relative;
@@ -218,9 +212,7 @@
     animation: spin 0.8s linear infinite;
   }
 
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
+  @keyframes spin { to { transform: rotate(360deg); } }
 
   .last-update {
     font-size: 11px;
@@ -229,13 +221,10 @@
     padding: 8px 0 0 0;
   }
 
-  .content-area {
-    padding-bottom: 80px;
-  }
+  .content-area { padding-bottom: 80px; }
 
   .error-msg {
     padding: 12px 14px;
-    text-align: left;
     color: #ff6b6b;
     font-size: 12px;
     line-height: 1.6;
@@ -247,20 +236,9 @@
     border-radius: 3px;
     padding: 1px 6px;
     font-size: 11px;
-    margin-bottom: 6px;
+    margin-right: 6px;
     color: #ff9999;
   }
-  .diag-banner {
-    margin: 12px 8px 0;
-    background: #1a1200;
-    border: 1px solid #4a3500;
-    border-radius: 6px;
-    padding: 12px 14px;
-    font-size: 12px;
-    color: #c8a84b;
-    line-height: 1.6;
-  }
-  .diag-banner strong { color: #feca57; display: block; margin-bottom: 4px; }
 </style>
 </head>
 <body>
@@ -286,20 +264,15 @@
 //  CONFIGURATION — modifiez uniquement cette section
 // ══════════════════════════════════════════════════════
 
-// Votre token PRIM IDFM
-const PRIM_TOKEN = 'LR93KggTkThxa7Mmw0xbUytukiGqP9WG';
-
-// Intervalle de rafraîchissement (secondes)
+const PRIM_TOKEN  = 'LR93KggTkThxa7Mmw0xbUytukiGqP9WG';
 const REFRESH_SEC = 30;
 
-// Vos arrêts — id = numéro STIF (visible sur le référentiel IDFM)
-// lignes : null = toutes les lignes / ['38', '62'] = filtrer par numéro de ligne
 const ARRETS = [
   { id: '30029', nom: '21 - Stade Charlety',  sens: null, lignes: null },
   { id: '28007', nom: '67 - Stade Charlety',  sens: null, lignes: null },
   { id: '30094', nom: '21 - Daviel',          sens: null, lignes: null },
-  { id: '28847', nom: 'T3a - Stade Charlety',  sens: null, lignes: null },
-  { id: '24112', nom: 'T3a - Stade Charlety',  sens: null, lignes: null }
+  { id: '28847', nom: 'T3a - Stade Charlety', sens: null, lignes: null },
+  { id: '24112', nom: 'T3a - Stade Charlety', sens: null, lignes: null }
 ];
 
 // ══════════════════════════════════════════════════════
@@ -308,7 +281,6 @@ const ARRETS = [
 
 const PRIM_URL = 'https://prim.iledefrance-mobilites.fr/marketplace/stop-monitoring';
 
-// Couleurs officielles IDFM/RATP par numéro de ligne
 const LINE_COLORS = {
   '20':'#C95F2A','21':'#C9910D','22':'#8D5E26','24':'#7B7B00','26':'#8D5E26',
   '27':'#8D5E26','28':'#6A378E','29':'#1C4E9F','31':'#1C4E9F','38':'#6E5B9C',
@@ -316,53 +288,95 @@ const LINE_COLORS = {
   '57':'#7BBF4E','60':'#7BBF4E','62':'#C9910D','63':'#C9910D','64':'#8D5E26',
   '67':'#7BBF4E','68':'#8D5E26','69':'#C9910D','72':'#C9910D','76':'#C95F2A',
   '83':'#7BBF4E','84':'#7BBF4E','88':'#7BBF4E','91':'#C9910D','92':'#0055A4',
-  '185':'#0055A4','216':'#7BBF4E','289':'#1C4E9F','N':'#1a2040',
+  '185':'#0055A4','216':'#7BBF4E','289':'#1C4E9F',
+  'T1':'#D2007A','T2':'#D2007A','T3a':'#00814D','T3b':'#00814D',
+  'T4':'#F28C00','T5':'#662483','T6':'#BD8B00','T7':'#8A5A14','T8':'#D2007A',
+  'N':'#1a2040',
 };
 
 function lineColor(code) {
   return LINE_COLORS[code] || '#6c5ce7';
 }
 
+// ── Extraction robuste du numéro de ligne ─────────────────
+// PRIM peut renvoyer PublishedLineName sous 3 formes selon le transporteur :
+//   • [{value: "21"}]   → bus RATP/OPTILE
+//   • "21"              → forme scalaire rare
+//   • absent/null       → RER, certains Transilien
+// Dans ce dernier cas on extrait depuis LineRef et on mappe vers le nom court.
+function extractLineName(mvj) {
+  // Forme 1 : tableau d'objets [{value: "21"}]
+  const fromArray = mvj?.PublishedLineName?.[0]?.value;
+  if (fromArray && fromArray.trim()) return fromArray.trim();
+
+  // Forme 2 : chaîne directe "21"
+  const raw = mvj?.PublishedLineName;
+  if (typeof raw === 'string' && raw.trim()) return raw.trim();
+
+  // Forme 3 : JourneyNote contient parfois le libellé court (ex: Transilien)
+  const fromNote = mvj?.JourneyNote?.[0]?.value;
+  if (fromNote && fromNote.trim()) return fromNote.trim();
+
+  // Forme 4 : LineRef = "STIF:Line::C01073:" → extraire "C01073"
+  // puis mapper via TABLE_LIGNES si disponible, sinon afficher l'id technique
+  const lineRef = mvj?.LineRef?.value ?? '';
+  const match   = lineRef.match(/::([^:]+):/);
+  const techId  = match ? match[1] : null;
+  if (techId) return TABLE_LIGNES[techId] ?? techId;
+
+  return '?';
+}
+
+// Table de correspondance ID technique → numéro de ligne affiché
+// Couvre les lignes RATP les plus courantes. Complétez si besoin.
+const TABLE_LIGNES = {
+  // Bus RATP (extrait du référentiel IDFM)
+  'C01073':'21',  'C01077':'26',  'C01080':'29',  'C01088':'38',
+  'C01091':'42',  'C01096':'47',  'C01104':'57',  'C01108':'60',
+  'C01111':'62',  'C01112':'63',  'C01113':'64',  'C01114':'65',
+  'C01116':'67',  'C01117':'68',  'C01118':'69',  'C01120':'72',
+  'C01125':'76',  'C01133':'83',  'C01134':'84',  'C01138':'88',
+  'C01141':'91',  'C01142':'92',  'C01143':'93',  'C01144':'94',
+  'C01145':'95',  'C01146':'96',
+  // Trams
+  'C01389':'T3a', 'C01390':'T3b', 'C01374':'T1',  'C01371':'T2',
+  'C01391':'T4',  'C01398':'T5',  'C01399':'T6',  'C01400':'T7',
+  // RER (nom court)
+  'C01727':'A',   'C01728':'B',   'C01729':'C',   'C01730':'D',
+  'C01731':'E',
+  // Métro
+  'C01372':'1',   'C01373':'2',   'C01374':'3',   'C01386':'3b',
+  'C01375':'4',   'C01376':'5',   'C01377':'6',   'C01378':'7',
+  'C01388':'7b',  'C01379':'8',   'C01380':'9',   'C01381':'10',
+  'C01382':'11',  'C01383':'12',  'C01384':'13',  'C01385':'14',
+};
+
 // ── Temps ────────────────────────────────────────────
 function minsUntil(d) {
-  // d est un objet Date (PRIM renvoie ISO 8601 avec timezone)
   if (!d || isNaN(d)) return 999;
   return Math.max(0, Math.round((d - Date.now()) / 60000));
 }
-
 function formatTime(m) {
   if (m === 0) return "À l'approche";
   if (m === 1) return '1 min';
   return m + ' min';
 }
-
 function timeClass(m) {
   if (m <= 1) return 'imminent';
   if (m <= 3) return 'approaching';
   return '';
 }
 
-// ── Appel API PRIM ───────────────────────────────────
+// ── Appel API PRIM ────────────────────────────────────
 async function fetchDeps(arret) {
   const monRef = `STIF:StopPoint:Q:${arret.id}:`;
-  const url = `${PRIM_URL}?MonitoringRef=${encodeURIComponent(monRef)}`;
+  const url    = `${PRIM_URL}?MonitoringRef=${encodeURIComponent(monRef)}`;
 
   let r;
   try {
-    r = await fetch(url, {
-      headers: { 'apikey': PRIM_TOKEN, 'Accept': 'application/json' }
-    });
-  } catch (netErr) {
-    // TypeError = réseau / CORS
-    const msg = netErr.message || String(netErr);
-    if (msg.includes('fetch') || netErr.name === 'TypeError') {
-      throw new Error(
-        'Erreur réseau (CORS ?). ' +
-        'Vérifiez que le fichier est servi en HTTPS et que votre token est actif. ' +
-        'Détail : ' + msg
-      );
-    }
-    throw netErr;
+    r = await fetch(url, { headers: { 'apikey': PRIM_TOKEN, 'Accept': 'application/json' } });
+  } catch (e) {
+    throw new Error('Erreur réseau : ' + (e.message || String(e)));
   }
 
   if (!r.ok) {
@@ -372,7 +386,6 @@ async function fetchDeps(arret) {
 
   const json = await r.json();
 
-  // Chemin SIRI Lite : Siri.ServiceDelivery.StopMonitoringDelivery[0].MonitoredStopVisit
   const visits =
     json?.Siri?.ServiceDelivery?.StopMonitoringDelivery?.[0]
         ?.MonitoredStopVisit ?? [];
@@ -381,29 +394,16 @@ async function fetchDeps(arret) {
     const mvj  = v?.MonitoredVehicleJourney ?? {};
     const call = mvj?.MonitoredCall ?? {};
 
-    // Numéro de ligneligne
-const line = mvj?.PublishedLineName?.[0]?.value              // 1. Nom publié
-  ?? call?.RouteShortName                                    // 2. Nom court dans l'arrêt (très fiable)
-  ?? mvj?.LineRef?.value?.split(':').slice(-2, -1)[0]        // 3. Extraction de l'ID technique (ex: C01073)
-  ?? '?';
-
-    // Destination
-    const dest = mvj?.DestinationName?.[0]?.value ?? '—';
-
-    // Heure : heure estimée, sinon heure théorique
-    const rawTime = call?.ExpectedDepartureTime ?? call?.AimedDepartureTime;
-    const dep = rawTime ? new Date(rawTime) : null;
-
-    // Bus déjà à l'arrêt ?
-    const atStop = call?.VehicleAtStop === true || call?.VehicleAtStop === 'true';
-
-    // Course annulée ?
-    const cancelled = mvj?.Monitored === false || mvj?.Monitored === 'false';
+    const line      = extractLineName(mvj);  // ← CORRIGÉ
+    const dest      = mvj?.DestinationName?.[0]?.value ?? '—';
+    const rawTime   = call?.ExpectedDepartureTime ?? call?.AimedDepartureTime;
+    const dep       = rawTime ? new Date(rawTime) : null;
+    const atStop    = call?.VehicleAtStop === true || call?.VehicleAtStop === 'true';
+    const cancelled = mvj?.Monitored === false   || mvj?.Monitored === 'false';
 
     return { line, dest, dep, atStop, cancelled };
   }).filter(d => !d.cancelled && d.dep !== null);
 
-  // Filtre par ligne si demandé
   if (arret.lignes?.length) {
     departures = departures.filter(d => arret.lignes.includes(d.line));
   }
@@ -411,70 +411,54 @@ const line = mvj?.PublishedLineName?.[0]?.value              // 1. Nom publié
   return departures;
 }
 
-// ── Groupement ligne + destination ──────────────────
+// ── Groupement ───────────────────────────────────────
 function groupDepartures(deps) {
   const groups = {};
   for (const d of deps) {
     const key = d.line + '|' + d.dest;
-    if (!groups[key]) {
-      groups[key] = { line: d.line, dest: d.dest, times: [] };
-    }
-    if (groups[key].times.length < 2) {
+    if (!groups[key]) groups[key] = { line: d.line, dest: d.dest, times: [] };
+    if (groups[key].times.length < 2)
       groups[key].times.push(d.atStop ? 0 : minsUntil(d.dep));
-    }
   }
-  return Object.values(groups).sort((a, b) =>
-    (a.times[0] ?? 999) - (b.times[0] ?? 999)
-  );
+  return Object.values(groups).sort((a, b) => (a.times[0] ?? 999) - (b.times[0] ?? 999));
 }
 
-// ── Rendu d'un arrêt ────────────────────────────────
+// ── Rendu ────────────────────────────────────────────
 function renderStop(arret, deps, err) {
-  const stopId = arret.id;
-  const stopHead = `
+  const head = `
     <div class="stop-header">
       <div class="stop-icon">B</div>
       <div>
         <span class="stop-name">${arret.nom}</span>
         ${arret.sens ? `<div style="font-size:11px;color:#8db4cc;margin-top:2px">${arret.sens}</div>` : ''}
-        <div style="font-size:10px;color:#3a5a7a;margin-top:1px">ID ${stopId}</div>
+        <div style="font-size:10px;color:#3a5a7a;margin-top:1px">ID ${arret.id}</div>
       </div>
     </div>`;
 
-  if (err) {
-    return `
-      <div class="stop-section">
-        ${stopHead}
-        <div class="error-msg">
-          <span class="err-code">ERREUR</span> ${err.message}
-        </div>
-      </div>`;
-  }
+  if (err) return `
+    <div class="stop-section">${head}
+      <div class="error-msg"><span class="err-code">ERREUR</span> ${err.message}</div>
+    </div>`;
 
-  if (!deps.length) {
-    return `
-      <div class="stop-section">
-        ${stopHead}
-        <div class="no-data">Aucun passage prévu dans l'heure</div>
-      </div>`;
-  }
+  if (!deps.length) return `
+    <div class="stop-section">${head}
+      <div class="no-data">Aucun passage prévu dans l'heure</div>
+    </div>`;
 
-  const groups = groupDepartures(deps);
-  const rows = groups.map(g =>
+  const rows = groupDepartures(deps).map(g =>
     g.times.map(m => `
       <div class="departure-row">
-        <div class="line-badge" style="background:${lineColor(g.line)};color:#fff">${g.line}</div>
+        <div class="line-badge" style="background:${lineColor(g.line)}">${g.line}</div>
         <div class="direction-text">${g.dest}</div>
         <div class="time-display ${timeClass(m)}">${formatTime(m)}</div>
       </div>`).join('')
   ).join('');
 
-  return `<div class="stop-section">${stopHead}${rows}</div>`;
+  return `<div class="stop-section">${head}${rows}</div>`;
 }
 
-// ── Auto-refresh ─────────────────────────────────────
-let countdown = REFRESH_SEC;
-let autoTimer;
+// ── Auto-refresh ──────────────────────────────────────
+let countdown = REFRESH_SEC, autoTimer;
 
 function startAutoRefresh() {
   clearInterval(autoTimer);
@@ -492,7 +476,7 @@ function updateCountdown() {
   if (el) el.textContent = countdown + 's';
 }
 
-// ── Refresh principal ────────────────────────────────
+// ── Refresh ───────────────────────────────────────────
 async function refreshAll() {
   const btn = document.getElementById('refreshBtn');
   btn.disabled = true;
@@ -501,7 +485,7 @@ async function refreshAll() {
   const results = await Promise.allSettled(
     ARRETS.map(async a => {
       try   { return { arret: a, deps: await fetchDeps(a), err: null }; }
-      catch (e) { return { arret: a, deps: null,            err: e   }; }
+      catch (e) { return { arret: a, deps: null, err: e }; }
     })
   );
 
@@ -512,9 +496,7 @@ async function refreshAll() {
     html += renderStop(arret, deps ?? [], err);
   }
 
-  const now = new Date();
-  const ts = [now.getHours(), now.getMinutes(), now.getSeconds()]
-    .map(n => String(n).padStart(2, '0')).join(':');
+  const ts = new Date().toLocaleTimeString('fr-FR');
   html += `<div class="last-update">Mis à jour : ${ts} — API IDFM PRIM</div>`;
 
   document.getElementById('app').innerHTML = html;
@@ -523,7 +505,6 @@ async function refreshAll() {
   startAutoRefresh();
 }
 
-// ── Init ─────────────────────────────────────────────
 refreshAll();
 </script>
 
